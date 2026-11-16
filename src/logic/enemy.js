@@ -11,7 +11,7 @@ export function canHit(enemyCenterX, playerCenterX, range, playerBottom, enemyTo
   return Math.abs(enemyCenterX - playerCenterX) <= range && playerBottom > enemyTop;
 }
 
-export function updateEnemyState(state, timer, dt, inRange, windupTime, recoverTime) {
+export function updateEnemyState(state, timer, dt, inRange, windupTime, recoverTime, stunTime) {
   if (state === 'approach') {
     if (inRange) {
       return { state: 'windup', timer: 0, attackHappened: false };
@@ -31,6 +31,13 @@ export function updateEnemyState(state, timer, dt, inRange, windupTime, recoverT
       return { state: 'approach', timer: 0, attackHappened: false };
     }
     return { state: 'recover', timer: newTimer, attackHappened: false };
+  }
+  if (state === 'stunned') {
+    const newTimer = timer + dt;
+    if (newTimer >= stunTime) {
+      return { state: 'approach', timer: 0, attackHappened: false };
+    }
+    return { state: 'stunned', timer: newTimer, attackHappened: false };
   }
   throw new Error(`Unknown enemy state: ${state}`);
 }

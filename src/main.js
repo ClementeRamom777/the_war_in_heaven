@@ -6,7 +6,15 @@ import {
   startJump,
 } from './logic/player.js';
 import { moveToward, canHit, updateEnemyState } from './logic/enemy.js';
-import { updateFacing, tickCooldown, canAttack, attackHits } from './logic/combat.js';
+import {
+  updateFacing,
+  tickCooldown,
+  canAttack,
+  attackHits,
+  canParry,
+  isParryActive,
+  resolveEnemyHit,
+} from './logic/combat.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -25,6 +33,7 @@ const ENEMY_STOP_DISTANCE = 50; // between centers
 const ENEMY_ATTACK_RANGE = 70;
 const ENEMY_WINDUP_TIME = 0.5; // seconds
 const ENEMY_RECOVER_TIME = 1.0; // seconds
+const ENEMY_STUN_TIME = 1.0; // seconds
 const HIT_FLASH_TIME = 0.2; // seconds
 
 const ATTACK_COOLDOWN = 0.4; // seconds
@@ -33,6 +42,11 @@ const ATTACK_SHOW_TIME = 0.1; // seconds
 const ENEMY_FLASH_TIME = 0.15; // seconds
 const SLASH_WIDTH = 40;
 const SLASH_HEIGHT = 10;
+
+const PARRY_ACTIVE_TIME = 0.2; // seconds
+const PARRY_COOLDOWN = 0.6; // seconds
+const SHIELD_WIDTH = 8;
+const SHIELD_HEIGHT = 50;
 
 const GROUND_Y = canvas.height - PLAYER_HEIGHT;
 const ENEMY_Y = canvas.height - ENEMY_HEIGHT;
@@ -47,6 +61,9 @@ let facing = 1;
 let attackRequested = false;
 let attackCooldown = 0;
 let attackShowTimer = 0;
+let parryRequested = false;
+let parryTimer = 0;
+let parryCooldown = 0;
 
 let enemyX = canvas.width - ENEMY_WIDTH - 20;
 let enemyState = 'approach';
@@ -68,6 +85,10 @@ window.addEventListener('keydown', (event) => {
   } else if (event.code === 'KeyJ') {
     if (!event.repeat) {
       attackRequested = true;
+    }
+  } else if (event.code === 'KeyK') {
+    if (!event.repeat) {
+      parryRequested = true;
     }
   }
 });
@@ -120,6 +141,14 @@ function frame(timestamp) {
   }
   attackRequested = false;
 
+  parryTimer = tickCooldown(parryTimer, dt);
+  parryCooldown = tickCooldown(parryCooldown, dt);
+  if (canParry(parryRequested, parryCooldown)) {
+    parryTimer = PARRY_ACTIVE_TIME;
+    parryCooldown = PARRY_COOLDOWN;
+  }
+  parryRequested = false;
+
   const inRange = Math.abs(enemyCenterX - playerCenterX) <= ENEMY_ATTACK_RANGE;
 
   const enemyUpdate = updateEnemyState(
@@ -128,7 +157,8 @@ function frame(timestamp) {
     dt,
     inRange,
     ENEMY_WINDUP_TIME,
-    ENEMY_RECOVER_TIME
+    ENEMY_RECOVER_TIME,
+    ENEMY_STUN_TIME
   );
   enemyState = enemyUpdate.state;
   enemyTimer = enemyUpdate.timer;
@@ -139,8 +169,13 @@ function frame(timestamp) {
   }
 
   if (enemyUpdate.attackHappened) {
-    if (canHit(enemyCenterX, playerCenterX, ENEMY_ATTACK_RANGE, playerBottom, ENEMY_Y)) {
+    const hitLanded = canHit(enemyCenterX, playerCenterX, ENEMY_ATTACK_RANGE, playerBottom, ENEMY_Y);
+    const result = resolveEnemyHit(hitLanded, isParryActive(parryTimer));
+    if (result === 'hit') {
       hitFlashTimer = HIT_FLASH_TIME;
+    } else if (result === 'parried') {
+      enemyState = 'stunned';
+      enemyTimer = 0;
     }
   }
 
@@ -160,8 +195,17 @@ function frame(timestamp) {
     ctx.fillRect(slashX, slashY, SLASH_WIDTH, SLASH_HEIGHT);
   }
 
+  if (isParryActive(parryTimer)) {
+    const shieldX = facing === 1 ? playerX + PLAYER_WIDTH : playerX - SHIELD_WIDTH;
+    const shieldY = playerY + (PLAYER_HEIGHT - SHIELD_HEIGHT) / 2;
+    ctx.fillStyle = '#6cf';
+    ctx.fillRect(shieldX, shieldY, SHIELD_WIDTH, SHIELD_HEIGHT);
+  }
+
   if (enemyFlashTimer > 0) {
     ctx.fillStyle = '#fff';
+  } else if (enemyState === 'stunned') {
+    ctx.fillStyle = '#88f';
   } else {
     ctx.fillStyle = enemyState === 'windup' ? '#ff0' : '#c33';
   }

@@ -70,3 +70,17 @@ test('updateEnemyState: recover reaching recoverTime goes back to approach', () 
   assert.equal(result.timer, 0);
   assert.equal(result.attackHappened, false);
 });
+
+test('updateEnemyState: stunned before stunTime stays stunned', () => {
+  const result = updateEnemyState('stunned', 0.5, 0.1, true, 0.5, 1.0, 1.0);
+  assert.equal(result.state, 'stunned');
+  assertClose(result.timer, 0.6);
+  assert.equal(result.attackHappened, false);
+});
+
+test('updateEnemyState: stunned reaching stunTime goes back to approach', () => {
+  const result = updateEnemyState('stunned', 0.95, 0.05, true, 0.5, 1.0, 1.0);
+  assert.equal(result.state, 'approach');
+  assert.equal(result.timer, 0);
+  assert.equal(result.attackHappened, false);
+});

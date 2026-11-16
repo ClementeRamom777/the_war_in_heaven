@@ -17,3 +17,18 @@ export function attackHits(playerCenterX, facing, enemyCenterX, reach, playerBot
   const offset = (enemyCenterX - playerCenterX) * facing;
   return offset >= 0 && offset <= reach && playerBottom > enemyTop;
 }
+
+export function canParry(parryRequested, parryCooldown) {
+  return parryRequested && parryCooldown <= 0;
+}
+
+export function isParryActive(parryTimer) {
+  return parryTimer > 0;
+}
+
+export function resolveEnemyHit(hitLanded, parryActive) {
+  if (!hitLanded) {
+    return 'miss';
+  }
+  return parryActive ? 'parried' : 'hit';
+}

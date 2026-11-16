@@ -1,6 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { updateFacing, tickCooldown, canAttack, attackHits } from '../src/logic/combat.js';
+import {
+  updateFacing,
+  tickCooldown,
+  canAttack,
+  attackHits,
+  canParry,
+  isParryActive,
+  resolveEnemyHit,
+} from '../src/logic/combat.js';
 
 function assertClose(actual, expected) {
   assert.ok(
@@ -59,4 +67,36 @@ test('attackHits: enemy exactly at reach limit returns true', () => {
 
 test('attackHits: within reach but player above enemy returns false', () => {
   assert.equal(attackHits(300, 1, 350, 80, 470, 480), false);
+});
+
+test('canParry: requested with cooldown 0 returns true', () => {
+  assert.equal(canParry(true, 0), true);
+});
+
+test('canParry: requested while on cooldown returns false', () => {
+  assert.equal(canParry(true, 0.3), false);
+});
+
+test('canParry: not requested returns false', () => {
+  assert.equal(canParry(false, 0), false);
+});
+
+test('isParryActive: positive timer returns true', () => {
+  assert.equal(isParryActive(0.1), true);
+});
+
+test('isParryActive: timer 0 returns false', () => {
+  assert.equal(isParryActive(0), false);
+});
+
+test('resolveEnemyHit: no hit returns miss', () => {
+  assert.equal(resolveEnemyHit(false, true), 'miss');
+});
+
+test('resolveEnemyHit: hit with active parry returns parried', () => {
+  assert.equal(resolveEnemyHit(true, true), 'parried');
+});
+
+test('resolveEnemyHit: hit without parry returns hit', () => {
+  assert.equal(resolveEnemyHit(true, false), 'hit');
 });
