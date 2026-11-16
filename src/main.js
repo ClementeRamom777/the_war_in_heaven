@@ -15,6 +15,7 @@ import {
   isParryActive,
   resolveEnemyHit,
 } from './logic/combat.js';
+import { applyDamage, healthRatio, matchResult } from './logic/health.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -48,6 +49,13 @@ const PARRY_COOLDOWN = 0.6; // seconds
 const SHIELD_WIDTH = 8;
 const SHIELD_HEIGHT = 50;
 
+const MAX_HP = 100;
+const ENEMY_DAMAGE = 25;
+const PLAYER_DAMAGE = 20;
+const HUD_BAR_WIDTH = 300;
+const HUD_BAR_HEIGHT = 16;
+const HUD_MARGIN = 20;
+
 const GROUND_Y = canvas.height - PLAYER_HEIGHT;
 const ENEMY_Y = canvas.height - ENEMY_HEIGHT;
 
@@ -64,6 +72,8 @@ let attackShowTimer = 0;
 let parryRequested = false;
 let parryTimer = 0;
 let parryCooldown = 0;
+let playerHp = MAX_HP;
+let enemyHp = MAX_HP;
 
 let enemyX = canvas.width - ENEMY_WIDTH - 20;
 let enemyState = 'approach';
@@ -115,6 +125,17 @@ function frame(timestamp) {
   const dt = Math.min((timestamp - lastTimestamp) / 1000, MAX_DT);
   lastTimestamp = timestamp;
 
+  const result = matchResult(playerHp, enemyHp);
+  if (result === 'playing') {
+    updateGame(dt);
+  }
+
+  draw();
+
+  requestAnimationFrame(frame);
+}
+
+function updateGame(dt) {
   const direction = directionFromKeys(keys.left, keys.right);
   facing = updateFacing(facing, direction);
   playerX = updatePlayerX(playerX, direction, PLAYER_SPEED, dt, 0, canvas.width - PLAYER_WIDTH);
@@ -137,6 +158,7 @@ function frame(timestamp) {
     attackShowTimer = ATTACK_SHOW_TIME;
     if (attackHits(playerCenterX, facing, enemyCenterX, ATTACK_REACH, playerBottom, ENEMY_Y)) {
       enemyFlashTimer = ENEMY_FLASH_TIME;
+      enemyHp = applyDamage(enemyHp, PLAYER_DAMAGE);
     }
   }
   attackRequested = false;
@@ -170,10 +192,11 @@ function frame(timestamp) {
 
   if (enemyUpdate.attackHappened) {
     const hitLanded = canHit(enemyCenterX, playerCenterX, ENEMY_ATTACK_RANGE, playerBottom, ENEMY_Y);
-    const result = resolveEnemyHit(hitLanded, isParryActive(parryTimer));
-    if (result === 'hit') {
+    const hitResult = resolveEnemyHit(hitLanded, isParryActive(parryTimer));
+    if (hitResult === 'hit') {
       hitFlashTimer = HIT_FLASH_TIME;
-    } else if (result === 'parried') {
+      playerHp = applyDamage(playerHp, ENEMY_DAMAGE);
+    } else if (hitResult === 'parried') {
       enemyState = 'stunned';
       enemyTimer = 0;
     }
@@ -182,7 +205,9 @@ function frame(timestamp) {
   hitFlashTimer = Math.max(hitFlashTimer - dt, 0);
   enemyFlashTimer = Math.max(enemyFlashTimer - dt, 0);
   attackShowTimer = Math.max(attackShowTimer - dt, 0);
+}
 
+function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   ctx.fillStyle = hitFlashTimer > 0 ? '#f00' : '#fff';
@@ -211,7 +236,15 @@ function frame(timestamp) {
   }
   ctx.fillRect(enemyX, ENEMY_Y, ENEMY_WIDTH, ENEMY_HEIGHT);
 
-  requestAnimationFrame(frame);
+  drawHealthBar(HUD_MARGIN, playerHp, '#3c6');
+  drawHealthBar(canvas.width - HUD_MARGIN - HUD_BAR_WIDTH, enemyHp, '#c33');
+}
+
+function drawHealthBar(x, hp, color) {
+  ctx.fillStyle = '#333';
+  ctx.fillRect(x, HUD_MARGIN, HUD_BAR_WIDTH, HUD_BAR_HEIGHT);
+  ctx.fillStyle = color;
+  ctx.fillRect(x, HUD_MARGIN, HUD_BAR_WIDTH * healthRatio(hp, MAX_HP), HUD_BAR_HEIGHT);
 }
 
 requestAnimationFrame(frame);
