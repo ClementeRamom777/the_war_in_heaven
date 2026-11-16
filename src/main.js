@@ -6,6 +6,7 @@ import {
   startJump,
 } from './logic/player.js';
 import { moveToward, canHit, updateEnemyState } from './logic/enemy.js';
+import { updateFacing, tickCooldown, canAttack, attackHits } from './logic/combat.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -26,6 +27,13 @@ const ENEMY_WINDUP_TIME = 0.5; // seconds
 const ENEMY_RECOVER_TIME = 1.0; // seconds
 const HIT_FLASH_TIME = 0.2; // seconds
 
+const ATTACK_COOLDOWN = 0.4; // seconds
+const ATTACK_REACH = 80; // between centers
+const ATTACK_SHOW_TIME = 0.1; // seconds
+const ENEMY_FLASH_TIME = 0.15; // seconds
+const SLASH_WIDTH = 40;
+const SLASH_HEIGHT = 10;
+
 const GROUND_Y = canvas.height - PLAYER_HEIGHT;
 const ENEMY_Y = canvas.height - ENEMY_HEIGHT;
 
@@ -35,10 +43,15 @@ let playerVy = 0;
 let onGround = true;
 let jumpRequested = false;
 let hitFlashTimer = 0;
+let facing = 1;
+let attackRequested = false;
+let attackCooldown = 0;
+let attackShowTimer = 0;
 
 let enemyX = canvas.width - ENEMY_WIDTH - 20;
 let enemyState = 'approach';
 let enemyTimer = 0;
+let enemyFlashTimer = 0;
 
 const keys = { left: false, right: false };
 
@@ -51,6 +64,10 @@ window.addEventListener('keydown', (event) => {
     event.preventDefault();
     if (!event.repeat) {
       jumpRequested = true;
+    }
+  } else if (event.code === 'KeyJ') {
+    if (!event.repeat) {
+      attackRequested = true;
     }
   }
 });
@@ -78,6 +95,7 @@ function frame(timestamp) {
   lastTimestamp = timestamp;
 
   const direction = directionFromKeys(keys.left, keys.right);
+  facing = updateFacing(facing, direction);
   playerX = updatePlayerX(playerX, direction, PLAYER_SPEED, dt, 0, canvas.width - PLAYER_WIDTH);
 
   playerVy = startJump(onGround, jumpRequested, JUMP_SPEED, playerVy);
@@ -89,7 +107,19 @@ function frame(timestamp) {
   onGround = vertical.onGround;
 
   const playerCenterX = playerX + PLAYER_WIDTH / 2;
+  const playerBottom = playerY + PLAYER_HEIGHT;
   let enemyCenterX = enemyX + ENEMY_WIDTH / 2;
+
+  attackCooldown = tickCooldown(attackCooldown, dt);
+  if (canAttack(attackRequested, attackCooldown)) {
+    attackCooldown = ATTACK_COOLDOWN;
+    attackShowTimer = ATTACK_SHOW_TIME;
+    if (attackHits(playerCenterX, facing, enemyCenterX, ATTACK_REACH, playerBottom, ENEMY_Y)) {
+      enemyFlashTimer = ENEMY_FLASH_TIME;
+    }
+  }
+  attackRequested = false;
+
   const inRange = Math.abs(enemyCenterX - playerCenterX) <= ENEMY_ATTACK_RANGE;
 
   const enemyUpdate = updateEnemyState(
@@ -109,20 +139,32 @@ function frame(timestamp) {
   }
 
   if (enemyUpdate.attackHappened) {
-    const playerBottom = playerY + PLAYER_HEIGHT;
     if (canHit(enemyCenterX, playerCenterX, ENEMY_ATTACK_RANGE, playerBottom, ENEMY_Y)) {
       hitFlashTimer = HIT_FLASH_TIME;
     }
   }
 
   hitFlashTimer = Math.max(hitFlashTimer - dt, 0);
+  enemyFlashTimer = Math.max(enemyFlashTimer - dt, 0);
+  attackShowTimer = Math.max(attackShowTimer - dt, 0);
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   ctx.fillStyle = hitFlashTimer > 0 ? '#f00' : '#fff';
   ctx.fillRect(playerX, playerY, PLAYER_WIDTH, PLAYER_HEIGHT);
 
-  ctx.fillStyle = enemyState === 'windup' ? '#ff0' : '#c33';
+  if (attackShowTimer > 0) {
+    const slashX = facing === 1 ? playerX + PLAYER_WIDTH : playerX - SLASH_WIDTH;
+    const slashY = playerY + (PLAYER_HEIGHT - SLASH_HEIGHT) / 2;
+    ctx.fillStyle = '#9cf';
+    ctx.fillRect(slashX, slashY, SLASH_WIDTH, SLASH_HEIGHT);
+  }
+
+  if (enemyFlashTimer > 0) {
+    ctx.fillStyle = '#fff';
+  } else {
+    ctx.fillStyle = enemyState === 'windup' ? '#ff0' : '#c33';
+  }
   ctx.fillRect(enemyX, ENEMY_Y, ENEMY_WIDTH, ENEMY_HEIGHT);
 
   requestAnimationFrame(frame);
