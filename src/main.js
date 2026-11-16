@@ -16,6 +16,7 @@ import {
   resolveEnemyHit,
 } from './logic/combat.js';
 import { applyDamage, healthRatio, matchResult } from './logic/health.js';
+import { endScreenContent, shouldRestart } from './logic/match.js';
 
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -56,31 +57,66 @@ const HUD_BAR_WIDTH = 300;
 const HUD_BAR_HEIGHT = 16;
 const HUD_MARGIN = 20;
 
+const TITLE_FONT = 'bold 64px sans-serif';
+const TEXT_FONT = '24px sans-serif';
+const SWORD_BLADE_WIDTH = 10;
+const SWORD_BLADE_HEIGHT = 50;
+const SWORD_GUARD_WIDTH = 30;
+const SWORD_GUARD_HEIGHT = 6;
+const SWORD_HILT_HEIGHT = 14;
+
 const GROUND_Y = canvas.height - PLAYER_HEIGHT;
 const ENEMY_Y = canvas.height - ENEMY_HEIGHT;
 
-let playerX = (canvas.width - PLAYER_WIDTH) / 2;
-let playerY = GROUND_Y;
-let playerVy = 0;
-let onGround = true;
-let jumpRequested = false;
-let hitFlashTimer = 0;
-let facing = 1;
-let attackRequested = false;
-let attackCooldown = 0;
-let attackShowTimer = 0;
-let parryRequested = false;
-let parryTimer = 0;
-let parryCooldown = 0;
-let playerHp = MAX_HP;
-let enemyHp = MAX_HP;
+let playerX;
+let playerY;
+let playerVy;
+let onGround;
+let jumpRequested;
+let hitFlashTimer;
+let facing;
+let attackRequested;
+let attackCooldown;
+let attackShowTimer;
+let parryRequested;
+let parryTimer;
+let parryCooldown;
+let restartRequested;
+let playerHp;
+let enemyHp;
 
-let enemyX = canvas.width - ENEMY_WIDTH - 20;
-let enemyState = 'approach';
-let enemyTimer = 0;
-let enemyFlashTimer = 0;
+let enemyX;
+let enemyState;
+let enemyTimer;
+let enemyFlashTimer;
 
 const keys = { left: false, right: false };
+
+function resetGame() {
+  playerX = (canvas.width - PLAYER_WIDTH) / 2;
+  playerY = GROUND_Y;
+  playerVy = 0;
+  onGround = true;
+  jumpRequested = false;
+  hitFlashTimer = 0;
+  facing = 1;
+  attackRequested = false;
+  attackCooldown = 0;
+  attackShowTimer = 0;
+  parryRequested = false;
+  parryTimer = 0;
+  parryCooldown = 0;
+  restartRequested = false;
+  playerHp = MAX_HP;
+  enemyHp = MAX_HP;
+
+  enemyX = canvas.width - ENEMY_WIDTH - 20;
+  enemyState = 'approach';
+  enemyTimer = 0;
+  enemyFlashTimer = 0;
+}
+
+resetGame();
 
 window.addEventListener('keydown', (event) => {
   if (event.code === 'KeyA') {
@@ -99,6 +135,10 @@ window.addEventListener('keydown', (event) => {
   } else if (event.code === 'KeyK') {
     if (!event.repeat) {
       parryRequested = true;
+    }
+  } else if (event.code === 'KeyR') {
+    if (!event.repeat) {
+      restartRequested = true;
     }
   }
 });
@@ -125,12 +165,21 @@ function frame(timestamp) {
   const dt = Math.min((timestamp - lastTimestamp) / 1000, MAX_DT);
   lastTimestamp = timestamp;
 
-  const result = matchResult(playerHp, enemyHp);
+  let result = matchResult(playerHp, enemyHp);
+  if (shouldRestart(result, restartRequested)) {
+    resetGame();
+    result = matchResult(playerHp, enemyHp);
+  }
+  restartRequested = false;
+
   if (result === 'playing') {
     updateGame(dt);
   }
 
   draw();
+  if (result !== 'playing') {
+    drawEndScreen(endScreenContent(result), result);
+  }
 
   requestAnimationFrame(frame);
 }
@@ -245,6 +294,47 @@ function drawHealthBar(x, hp, color) {
   ctx.fillRect(x, HUD_MARGIN, HUD_BAR_WIDTH, HUD_BAR_HEIGHT);
   ctx.fillStyle = color;
   ctx.fillRect(x, HUD_MARGIN, HUD_BAR_WIDTH * healthRatio(hp, MAX_HP), HUD_BAR_HEIGHT);
+}
+
+function drawEndScreen(content, result) {
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height / 2;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  ctx.font = TITLE_FONT;
+  ctx.fillStyle = result === 'victory' ? '#3c6' : '#c33';
+  ctx.fillText(content.title, centerX, centerY - 60);
+
+  if (content.reward !== null) {
+    drawSwordIcon(centerX, centerY - 10);
+    ctx.font = TEXT_FONT;
+    ctx.fillStyle = '#fff';
+    ctx.fillText(content.reward, centerX, centerY + 50);
+  }
+
+  ctx.font = TEXT_FONT;
+  ctx.fillStyle = '#fff';
+  ctx.fillText(content.hint, centerX, centerY + 100);
+}
+
+function drawSwordIcon(centerX, centerY) {
+  const bladeX = centerX - SWORD_BLADE_WIDTH / 2;
+  const bladeTop = centerY - SWORD_BLADE_HEIGHT / 2;
+  const guardY = bladeTop + SWORD_BLADE_HEIGHT;
+
+  ctx.fillStyle = '#dde';
+  ctx.fillRect(bladeX, bladeTop, SWORD_BLADE_WIDTH, SWORD_BLADE_HEIGHT);
+
+  ctx.fillStyle = '#c93';
+  ctx.fillRect(centerX - SWORD_GUARD_WIDTH / 2, guardY, SWORD_GUARD_WIDTH, SWORD_GUARD_HEIGHT);
+
+  ctx.fillStyle = '#742';
+  ctx.fillRect(bladeX, guardY + SWORD_GUARD_HEIGHT, SWORD_BLADE_WIDTH, SWORD_HILT_HEIGHT);
 }
 
 requestAnimationFrame(frame);
